@@ -26,6 +26,7 @@ import (
 const (
 	testName          = "opentelemetry-metrics-test"
 	labelScaledObject = "scaledObject"
+	labelScaledJob    = "scaledJob"
 	labelType         = "type"
 )
 
@@ -34,7 +35,9 @@ var (
 	deploymentName                           = fmt.Sprintf("%s-deployment", testName)
 	monitoredDeploymentName                  = fmt.Sprintf("%s-monitored", testName)
 	scaledObjectName                         = fmt.Sprintf("%s-so", testName)
-	wrongScaledObjectName                    = fmt.Sprintf("%s-wrong", testName)
+	wrongScaledObjectName                    = fmt.Sprintf("%s-so-wrong", testName)
+	scaledJobName                            = fmt.Sprintf("%s-sj", testName)
+	wrongScaledJobName                       = fmt.Sprintf("%s-sj-wrong", testName)
 	wrongScalerName                          = fmt.Sprintf("%s-wrong-scaler", testName)
 	cronScaledJobName                        = fmt.Sprintf("%s-cron-sj", testName)
 	clientName                               = fmt.Sprintf("%s-client", testName)
@@ -47,7 +50,9 @@ type templateData struct {
 	TestNamespace           string
 	DeploymentName          string
 	ScaledObjectName        string
+	ScaledJobName           string
 	WrongScaledObjectName   string
+	WrongScaledJobName      string
 	WrongScalerName         string
 	CronScaledJobName       string
 	MonitoredDeploymentName string
@@ -144,6 +149,69 @@ spec:
         metricName: keda_scaler_errors_total
         threshold: '1'
         query: 'keda_scaler_errors_total{namespace="{{.TestNamespace}}",scaledObject="{{.WrongScaledObjectName}}"}'
+`
+
+	scaledJobTemplate = `
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: {{.ScaledJobName}}
+  namespace: {{.TestNamespace}}
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        containers:
+        - name: external-executor
+          image: busybox
+          command:
+          - sleep
+          - "30"
+          imagePullPolicy: IfNotPresent
+        restartPolicy: Never
+    backoffLimit: 1
+  pollingInterval: 5
+  maxReplicaCount: 3
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 0
+  triggers:
+    - type: kubernetes-workload
+      metadata:
+        podSelector: 'app={{.MonitoredDeploymentName}}'
+        value: '1'
+`
+
+	wrongScaledJobTemplate = `
+apiVersion: keda.sh/v1alpha1
+kind: ScaledJob
+metadata:
+  name: {{.WrongScaledJobName}}
+  namespace: {{.TestNamespace}}
+spec:
+  jobTargetRef:
+    template:
+      spec:
+        containers:
+        - name: external-executor
+          image: busybox
+          command:
+          - sleep
+          - "30"
+          imagePullPolicy: IfNotPresent
+        restartPolicy: Never
+    backoffLimit: 1
+  pollingInterval: 2
+  maxReplicaCount: 3
+  successfulJobsHistoryLimit: 0
+  failedJobsHistoryLimit: 0
+  triggers:
+    - type: prometheus
+      name: {{.WrongScalerName}}
+      metadata:
+        serverAddress: http://keda-prometheus.keda.svc.cluster.local:8080
+        metricName: keda_scaler_errors_total
+        threshold: '1'
+        query: 'keda_scaler_errors_total{namespace="{{.TestNamespace}}",scaledJob="{{.WrongScaledJobName}}"}'
 `
 
 	cronScaledJobTemplate = `
@@ -285,6 +353,7 @@ func TestPrometheusMetrics(t *testing.T) {
 	testScalerMetricLatency(t)
 	testScalerActiveMetric(t)
 	testScaledObjectErrors(t, data)
+	testScaledJobErrors(t, data)
 	testScalerErrors(t, data)
 	testOperatorMetrics(t, kc, data)
 	testScalableObjectMetrics(t)
@@ -301,6 +370,8 @@ func getTemplateData() (templateData, []Template) {
 			DeploymentName:          deploymentName,
 			ScaledObjectName:        scaledObjectName,
 			WrongScaledObjectName:   wrongScaledObjectName,
+			ScaledJobName:           scaledJobName,
+			WrongScaledJobName:      wrongScaledJobName,
 			WrongScalerName:         wrongScalerName,
 			MonitoredDeploymentName: monitoredDeploymentName,
 			ClientName:              clientName,
@@ -309,6 +380,7 @@ func getTemplateData() (templateData, []Template) {
 			{Name: "deploymentTemplate", Config: deploymentTemplate},
 			{Name: "monitoredDeploymentTemplate", Config: monitoredDeploymentTemplate},
 			{Name: "scaledObjectTemplate", Config: scaledObjectTemplate},
+			{Name: "scaledJobTemplate", Config: scaledJobTemplate},
 			{Name: "clientTemplate", Config: clientTemplate},
 			{Name: "authenticatioNTemplate", Config: authenticationTemplate},
 		}
@@ -337,7 +409,8 @@ func testScalerMetricValue(t *testing.T) {
 		for _, metric := range metrics {
 			labels := metric.GetLabel()
 			for _, label := range labels {
-				if *label.Name == labelScaledObject && *label.Value == scaledObjectName {
+				if (*label.Name == labelScaledObject && *label.Value == scaledObjectName) ||
+					(*label.Name == labelScaledJob && *label.Value == scaledJobName) {
 					assert.Equal(t, float64(4), *metric.Gauge.Value)
 					found = true
 				}
@@ -382,11 +455,47 @@ func testScaledObjectErrors(t *testing.T, data templateData) {
 	time.Sleep(10 * time.Second)
 }
 
+func testScaledJobErrors(t *testing.T, data templateData) {
+	t.Log("--- testing scaled job errors ---")
+
+	KubectlDeleteWithTemplate(t, data, "scaledJobTemplate", scaledJobTemplate)
+	KubectlApplyWithTemplate(t, data, "wrongScaledJobTemplate", wrongScaledJobTemplate)
+
+	time.Sleep(20 * time.Second)
+
+	family := fetchAndParsePrometheusMetrics(t, fmt.Sprintf("curl --insecure %s", kedaOperatorCollectorPrometheusExportURL))
+	if val, ok := family["keda_scaledjob_errors_total"]; ok {
+		errCounterVal1 := getErrorMetricsValue(val)
+
+		// wait for 2 seconds as pollinginterval is 2
+		time.Sleep(5 * time.Second)
+
+		family = fetchAndParsePrometheusMetrics(t, fmt.Sprintf("curl --insecure %s", kedaOperatorCollectorPrometheusExportURL))
+		if val, ok := family["keda_scaledjob_errors_total"]; ok {
+			errCounterVal2 := getErrorMetricsValue(val)
+			assert.NotEqual(t, errCounterVal2, float64(0))
+			assert.GreaterOrEqual(t, errCounterVal2, errCounterVal1)
+		} else {
+			t.Errorf("metric not available")
+		}
+	} else {
+		t.Errorf("metric not available")
+	}
+
+	KubectlDeleteWithTemplate(t, data, "wrongScaledJobTemplate", wrongScaledJobTemplate)
+	KubectlApplyWithTemplate(t, data, "scaledJobTemplate", scaledJobTemplate)
+	// wait for 10 seconds to correctly fetch metrics.
+	time.Sleep(10 * time.Second)
+}
+
 func testScalerErrors(t *testing.T, data templateData) {
 	t.Log("--- testing scaler errors ---")
 
 	KubectlDeleteWithTemplate(t, data, "scaledObjectTemplate", scaledObjectTemplate)
 	KubectlApplyWithTemplate(t, data, "wrongScaledObjectTemplate", wrongScaledObjectTemplate)
+
+	KubectlDeleteWithTemplate(t, data, "scaledJobTemplate", scaledJobTemplate)
+	KubectlApplyWithTemplate(t, data, "wrongScaledJobTemplate", wrongScaledJobTemplate)
 
 	time.Sleep(15 * time.Second)
 
@@ -409,6 +518,9 @@ func testScalerErrors(t *testing.T, data templateData) {
 		t.Errorf("metric not available")
 	}
 
+	KubectlDeleteWithTemplate(t, data, "wrongScaledJobTemplate", wrongScaledJobTemplate)
+	KubectlApplyWithTemplate(t, data, "scaledJobTemplate", scaledJobTemplate)
+
 	KubectlDeleteWithTemplate(t, data, "wrongScaledObjectTemplate", wrongScaledObjectTemplate)
 	KubectlApplyWithTemplate(t, data, "scaledObjectTemplate", scaledObjectTemplate)
 }
@@ -421,6 +533,16 @@ func getErrorMetricsValue(val *prommodel.MetricFamily) float64 {
 			labels := metric.GetLabel()
 			for _, label := range labels {
 				if *label.Name == "scaledObject" && *label.Value == wrongScaledObjectName {
+					return *metric.Counter.Value
+				}
+			}
+		}
+	case "keda_scaledjob_errors_total":
+		metrics := val.GetMetric()
+		for _, metric := range metrics {
+			labels := metric.GetLabel()
+			for _, label := range labels {
+				if *label.Name == "scaledJob" && *label.Value == wrongScaledJobName {
 					return *metric.Counter.Value
 				}
 			}
@@ -450,7 +572,8 @@ func testScalerMetricLatency(t *testing.T) {
 		for _, metric := range metrics {
 			labels := metric.GetLabel()
 			for _, label := range labels {
-				if *label.Name == labelScaledObject && *label.Value == scaledObjectName {
+				if (*label.Name == labelScaledObject && *label.Value == scaledObjectName) ||
+					(*label.Name == labelScaledJob && *label.Value == scaledJobName) {
 					assert.Equal(t, float64(0), *metric.Gauge.Value)
 					found = true
 				}
@@ -510,7 +633,8 @@ func testScalerActiveMetric(t *testing.T) {
 		for _, metric := range metrics {
 			labels := metric.GetLabel()
 			for _, label := range labels {
-				if *label.Name == labelScaledObject && *label.Value == scaledObjectName {
+				if (*label.Name == labelScaledObject && *label.Value == scaledObjectName) ||
+					(*label.Name == labelScaledJob && *label.Value == scaledJobName) {
 					assert.Equal(t, float64(1), *metric.Gauge.Value)
 					found = true
 				}
