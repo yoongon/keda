@@ -184,19 +184,19 @@ func RecordScalerActive(namespace string, scaledResource string, scaler string, 
 }
 
 // RecordScalerError counts the number of errors occurred in trying to get an external metric used by the HPA
-func RecordScalerError(namespace string, scaledObject string, scaler string, scalerIndex int, metric string, isScaledObject bool, err error) {
+func RecordScalerError(namespace string, scaledResource string, scaler string, scalerIndex int, metric string, isScaledObject bool, err error) {
 	if err != nil {
-		scalerErrors.With(getLabels(namespace, scaledObject, scaler, scalerIndex, metric, getResourceType(isScaledObject))).Inc()
+		scalerErrors.With(getLabels(namespace, scaledResource, scaler, scalerIndex, metric, getResourceType(isScaledObject))).Inc()
 		if isScaledObject {
-			RecordScaledObjectError(namespace, scaledObject, err)
+			RecordScaledObjectError(namespace, scaledResource, err)
 		} else {
-			RecordScaledJobError(namespace, scaledObject, err)
+			RecordScaledJobError(namespace, scaledResource, err)
 		}
 		scalerErrorsTotal.With(prometheus.Labels{}).Inc()
 		return
 	}
 	// initialize metric with 0 if not already set
-	_, errscaler := scalerErrors.GetMetricWith(getLabels(namespace, scaledObject, scaler, scalerIndex, metric, getResourceType(isScaledObject)))
+	_, errscaler := scalerErrors.GetMetricWith(getLabels(namespace, scaledResource, scaler, scalerIndex, metric, getResourceType(isScaledObject)))
 	if errscaler != nil {
 		log.Error(errscaler, "Unable to write to metrics to Prometheus Server: %v")
 	}
