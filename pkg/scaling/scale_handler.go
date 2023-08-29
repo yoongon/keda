@@ -685,10 +685,10 @@ func (h *scaleHandler) getScaledJobMetrics(ctx context.Context, scaledJob *kedav
 
 			if isTriggerActive {
 				if spec.External != nil {
-					logger.V(1).Info("Scaler for scaledObject is active", "scaler", scalerName, "metricName", metricName)
+					logger.V(1).Info("Scaler for scaledJob is active", "scaler", scalerName, "metricName", metricName)
 				}
 				if spec.Resource != nil {
-					logger.V(1).Info("Scaler for scaledObject is active", "scaler", scalerName, "metricName", spec.Resource.Name)
+					logger.V(1).Info("Scaler for scaledJob is active", "scaler", scalerName, "metricName", spec.Resource.Name)
 				}
 			}
 
