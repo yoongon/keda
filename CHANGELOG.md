@@ -51,6 +51,7 @@ To learn more about active deprecations, we recommend checking [GitHub Discussio
 
 - **AWS SQS Scaler**: Support for scaling to include delayed messages. ([#4377](https://github.com/kedacore/keda/issues/4377))
 - **Governance**: KEDA transitioned to CNCF Graduated project ([#63](https://github.com/kedacore/governance/issues/63))
+- **Prometheus Metrics**: Expose prometheus metrics for ScaledJob resources ([#4798](https://github.com/kedacore/keda/issues/4798))
 
 ### Improvements
 
@@ -78,7 +79,6 @@ New deprecation(s):
 
 ### Other
 
-- **General**: Expose prometheus metrics at ScaledJob like ScaledObject ([#4798](https://github.com/kedacore/keda/issues/4798))
 - **General**: Fixed a typo in the StatefulSet scaling resolver ([#4902](https://github.com/kedacore/keda/pull/4902))
 - **General**: Refactor ScaledJob related methods to be located at scale_handler  ([#4781](https://github.com/kedacore/keda/issues/4781))
 
