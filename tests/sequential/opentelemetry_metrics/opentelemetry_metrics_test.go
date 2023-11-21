@@ -20,6 +20,7 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	"github.com/kedacore/keda/v2/pkg/metricscollector"
+	. "github.com/kedacore/keda/v2/tests/helper"
 )
 
 const (
