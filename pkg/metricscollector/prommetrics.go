@@ -54,7 +54,7 @@ var (
 			Namespace: DefaultPromMetricsNamespace,
 			Subsystem: "scaler",
 			Name:      "metrics_value",
-			Help:      "Metric Value used for HPA",
+			Help:      "Metric Value used for ScaledObject calculation",
 		},
 		metricLabels,
 	)
@@ -63,7 +63,7 @@ var (
 			Namespace: DefaultPromMetricsNamespace,
 			Subsystem: "scaler",
 			Name:      "metrics_value",
-			Help:      "Metric Value used for ScaledJob calculation",
+			Help:      "Metric Value used for ScaledObject calculation",
 		},
 		metricLabelsForScaledJob,
 	)
