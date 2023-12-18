@@ -568,8 +568,8 @@ func testScaledJobErrors(t *testing.T, data templateData) {
 	time.Sleep(20 * time.Second)
 
 	family := fetchAndParsePrometheusMetrics(t, fmt.Sprintf("curl --insecure %s", kedaOperatorCollectorPrometheusExportURL))
-	val, ok := family["keda_scaledjob_errors_total"]
-	assert.True(t, ok, "keda_scaledjob_errors_total not available")
+	val, ok := family["keda_scaledjob_errors"]
+	assert.True(t, ok, "keda_scaledjob_errors not available")
 	if ok {
 		errCounterVal1 := getErrorMetricsValue(val)
 
@@ -577,8 +577,8 @@ func testScaledJobErrors(t *testing.T, data templateData) {
 		time.Sleep(5 * time.Second)
 
 		family = fetchAndParsePrometheusMetrics(t, fmt.Sprintf("curl --insecure %s", kedaOperatorCollectorPrometheusExportURL))
-		val, ok := family["keda_scaledjob_errors_total"]
-		assert.True(t, ok, "keda_scaledjob_errors_total not available")
+		val, ok := family["keda_scaledjob_errors"]
+		assert.True(t, ok, "keda_scaledjob_errors not available")
 		if ok {
 			errCounterVal2 := getErrorMetricsValue(val)
 			assert.NotEqual(t, errCounterVal2, float64(0))
@@ -643,7 +643,7 @@ func getErrorMetricsValue(val *prommodel.MetricFamily) float64 {
 				}
 			}
 		}
-	case "keda_scaledjob_errors_total":
+	case "keda_scaled_job_errors":
 		metrics := val.GetMetric()
 		for _, metric := range metrics {
 			labels := metric.GetLabel()

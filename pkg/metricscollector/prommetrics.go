@@ -262,7 +262,7 @@ func (p *PromMetrics) RecordScaledObjectError(namespace string, scaledObject str
 func (p *PromMetrics) RecordScaledJobError(namespace string, scaledJob string, err error) {
 	labels := prometheus.Labels{"namespace": namespace, "scaledJob": scaledJob}
 	if err != nil {
-		scaledObjectErrors.With(labels).Inc()
+		scaledJobErrors.With(labels).Inc()
 		return
 	}
 	// initialize metric with 0 if not already set
